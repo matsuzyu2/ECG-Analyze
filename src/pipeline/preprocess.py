@@ -7,8 +7,6 @@ from .config import Config
 
 
 def filter_and_detrend(ecg: np.ndarray, cfg: Config) -> np.ndarray:
-    # Convert from microvolt to millivolt scale expected by downstream detectors.
-    ecg = ecg / 1000.0
     # IIR butterworth with filtfilt; zero-phase
     filtered = nk.signal_filter(
         ecg,

@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import numpy as np
 import neurokit2 as nk
+from typing import Any
 
 from . import compat  # ensures NumPy compatibility shims are applied
 from .config import Config
 
 
-def detect_rpeaks(ecg: np.ndarray, cfg: Config) -> dict[str, np.ndarray | float]:
+def detect_rpeaks(ecg: np.ndarray, cfg: Config) -> dict[str, np.ndarray | float | dict[str, Any]]:
     # nk.ecg_peaks expects cleaned signal; apply nk.ecg_clean for robustness even after filtering
-    cleaned = nk.ecg_clean(ecg, sampling_rate=cfg.sampling_rate, method="neurokit")
+    cleaned = np.asarray(nk.ecg_clean(ecg, sampling_rate=cfg.sampling_rate, method="neurokit"))
     peaks, info = nk.ecg_peaks(cleaned, sampling_rate=cfg.sampling_rate)
 
-    peak_indices = np.where(peaks.get("ECG_R_Peaks", []))[0]
+    peak_indices = np.asarray(np.where(peaks.get("ECG_R_Peaks", []))[0])
     raw_quality = nk.ecg_quality(cleaned, sampling_rate=cfg.sampling_rate, method="zhao2018")
     quality = _quality_score(raw_quality)
 

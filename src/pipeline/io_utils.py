@@ -30,6 +30,10 @@ def load_ecg_segment(path: Path, cfg: Config | None = None, normalize_time: bool
     time = pd.to_numeric(df[time_col], errors="coerce").to_numpy(dtype=float)
     ecg = pd.to_numeric(df[ecg_col], errors="coerce").to_numpy(dtype=float)
 
+    # uV (絶対値の平均が100mVを超えるような場合) なら mV に変換
+    if np.nanmean(np.abs(ecg)) > 100:
+        ecg = ecg / 1000.0
+
     mask = np.isfinite(time) & np.isfinite(ecg)
     time = time[mask]
     ecg = ecg[mask]
