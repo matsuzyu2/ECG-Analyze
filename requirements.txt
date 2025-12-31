@@ -1,0 +1,5 @@
+pandas
+plotly
+neurokit2
+scipy
+mne
