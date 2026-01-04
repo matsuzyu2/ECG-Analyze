@@ -91,16 +91,48 @@ python src/run_hrv_metrics.py --session 251216_TK
 python src/run_hrv_metrics.py --session 251216_TK --segment 03_Resting_HR_1_Set1
 ```
 
+### Step 3: 群レベル統計 + 可視化（Protocol v2）
+
+Step 2 で生成された HRV集計CSV（`Results/hrv_summaries/*_hrv_summary.csv`）を入力として、
+条件情報（`Data/conditions.csv`）を付与し、群レベルの統計検定と論文掲載用の図を出力します。
+
+初回実行時に `Data/conditions.csv` が存在しない場合は、
+`Results/hrv_summaries` 内に存在する全セッションIDを網羅したテンプレートを自動生成し、
+「記入後に再実行してください」というメッセージを出して正常終了します。
+
+`Data/conditions.csv` の必須カラム:
+
+- `session_id`: セッション名（例: `251216_TK`）
+- `group`: 被験者グループ（`Increase` または `Decrease`）
+- `Set1_Cond`: Set1の介入条件（`Increase` / `Decrease` / `Control`）
+- `Set2_Cond`: Set2の介入条件（`Increase` / `Decrease` / `Control`）
+
+実行例:
+
+```bash
+# 初回: conditions.csv を自動生成（記入してから再実行）
+python src/run_group_stats.py
+
+# 2回目以降: 統計 + 図を出力
+python src/run_group_stats.py
+```
+
+出力先:
+
+- `Results/stats/`
+
 ## 出力
 
-出力はセッション単位で `Results/{session}/` に保存されます。
+出力は次の場所に保存されます。
 
 - `Results/{session}/diagnosis_{segment}.html`
 	- セグメントごとの診断レポート（極性、フィルタ前後波形、PSD、検出ピークなど）
 - `Results/{session}/peaks_{segment}.json`
 	- 検出ピーク（インデックス・時刻）とメタ情報（反転、skewness、品質ノート等）
-- `Results/{session}/hrv_summary.csv`
+- `Results/hrv_summaries/{session}_hrv_summary.csv`
 	- セッション内セグメントのHRV集計（SDNN, RMSSD, pNN50, LF/HF 等）
+- `Results/stats/`
+	- 群レベル統計の結果CSVと、論文掲載用の図（Step 3）
 
 ## 前処理ユーティリティ（必要な場合のみ）
 

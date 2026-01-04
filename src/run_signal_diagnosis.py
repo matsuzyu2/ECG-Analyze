@@ -103,12 +103,18 @@ def process_segment(
             print("  [2/5] Analyzing signal polarity...")
         
         polarity_result = check_polarity(ecg_raw, config)
-        ecg_oriented, was_inverted = auto_invert(ecg_raw, polarity_result)
+
+        # NOTE: Automatic inversion is intentionally disabled.
+        # We keep polarity/skewness calculation for diagnostics, but do not
+        # modify the signal based on it.
+        ecg_oriented = ecg_raw
+        was_inverted = False
         
         if verbose:
             print(f"        ✓ Skewness: {polarity_result.skewness:.3f}")
-            if was_inverted:
-                print(f"        ⚠ Signal INVERTED (was negative polarity)")
+            if polarity_result.is_inverted:
+                print(f"        ⚠ Negative skewness detected (possible inverted polarity)")
+                print(f"        ⚠ Auto-inversion is DISABLED; signal not modified")
             else:
                 print(f"        ✓ Polarity OK (no inversion needed)")
         
@@ -162,7 +168,7 @@ def process_segment(
             print("  Generating diagnostic report...")
         
         html_content = create_diagnosis_report(
-            ecg_raw=ecg_oriented,  # After inversion, before filtering
+            ecg_raw=ecg_raw,  # Pre-inversion, pre-filter (original polarity)
             ecg_filtered=ecg_filtered,
             time=time,
             peak_indices=detection_result.peak_indices,

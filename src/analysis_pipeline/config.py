@@ -23,7 +23,7 @@ class Config:
     # ==========================================================================
     # Skewness threshold for automatic signal inversion
     # If skewness < SKEWNESS_THRESHOLD, the signal is considered inverted
-    SKEWNESS_THRESHOLD: float = -0.5
+    SKEWNESS_THRESHOLD: float = -0.8
     
     # ==========================================================================
     # Bandpass Filter Parameters (Zero-phase Butterworth)
@@ -74,6 +74,7 @@ class Config:
     # Subdirectories
     PROCESSED_SUBDIR: str = "Processed"
     SEGMENTS_SUBDIR: str = "split_segments"
+    STATS_SUBDIR: str = "stats"
     
     # ==========================================================================
     # Output File Naming
@@ -108,6 +109,18 @@ class Config:
         results_dir = self.get_results_dir() / session_id
         results_dir.mkdir(parents=True, exist_ok=True)
         return results_dir
+
+    def get_hrv_summaries_dir(self) -> Path:
+        """Get centralized directory for HRV summary CSV outputs."""
+        summaries_dir = self.get_results_dir() / "hrv_summaries"
+        summaries_dir.mkdir(parents=True, exist_ok=True)
+        return summaries_dir
+
+    def get_stats_dir(self) -> Path:
+        """Get centralized directory for group stats outputs."""
+        stats_dir = self.get_results_dir() / self.STATS_SUBDIR
+        stats_dir.mkdir(parents=True, exist_ok=True)
+        return stats_dir
     
     def get_segments_dir(self, session_id: str) -> Path:
         """Get split_segments directory for a session."""
@@ -134,7 +147,7 @@ class Config:
     
     def get_hrv_summary_path(self, session_id: str) -> Path:
         """Get path for HRV summary CSV."""
-        return self.get_session_results_dir(session_id) / self.HRV_SUMMARY_FILE
+        return self.get_hrv_summaries_dir() / f"{session_id}_{self.HRV_SUMMARY_FILE}"
 
 
 # Default configuration instance
