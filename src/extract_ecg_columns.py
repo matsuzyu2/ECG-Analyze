@@ -10,7 +10,7 @@ import pandas as pd
 
 DESIRED_COLUMNS = [
     "Time (s)",
-    "ECG (uV)",
+    "ExGa 1(uV)",
     "Packet Counter(DIGITAL)",
     "TRIGGER(DIGITAL)",
 ]
@@ -113,6 +113,12 @@ def extract_columns(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    append_to_existing = output_path.exists() and output_path.stat().st_size > 0
+    if append_to_existing:
+        print(f"↪ Appending to existing file: {output_path}")
+    else:
+        print(f"Writing new file: {output_path}")
+
     metadata_lines = _read_metadata_lines(input_path=input_path, skiprows=skiprows)
     recording_start = _parse_recording_start(metadata_lines)
 
@@ -123,11 +129,16 @@ def extract_columns(
         thousands=thousands,
     )
 
-    metadata_written = _write_metadata_header(
-        output_path=output_path,
-        metadata_lines=metadata_lines,
-    )
-    first_chunk_mode = "a" if metadata_written else "w"
+    if append_to_existing:
+        # Do not rewrite metadata/header when appending.
+        metadata_written = False
+        first_chunk_mode = "a"
+    else:
+        metadata_written = _write_metadata_header(
+            output_path=output_path,
+            metadata_lines=metadata_lines,
+        )
+        first_chunk_mode = "a" if metadata_written else "w"
 
     reader = pd.read_csv(
         input_path,
@@ -144,7 +155,8 @@ def extract_columns(
     )
     timestamp_origin = pd.Timestamp(recording_start) if recording_start else None
 
-    wrote_header = False
+    # If we are appending, assume the destination already has a header.
+    wrote_header = append_to_existing
     total_rows = 0
     warned_fractional_int_columns: set[str] = set()
 

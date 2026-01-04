@@ -9,9 +9,9 @@ from typing import Final
 import pandas as pd
 import plotly.graph_objects as go
 
-DATA_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "Data"
-DEFAULT_ECG_FILE: Final[Path] = DATA_DIR / "251215_ECG_TK_01_extracted.csv"
-EXPECTED_COLUMNS: Final[set[str]] = {"Time (s)", "ECG (uV)"}
+DATA_DIR: Final[Path] = Path(__file__).resolve().parents[1] / "Data"/"Processed"/"251210_MS"/"split_segments"
+DEFAULT_ECG_FILE: Final[Path] = DATA_DIR / "01_Session_01.csv"
+EXPECTED_COLUMNS: Final[set[str]] = {"Time (s)", "ExGa 1(uV)"}
 
 
 def load_ecg_data(file_path: Path) -> pd.DataFrame:
@@ -41,7 +41,7 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(
         columns={
             "Time (s)": "time_seconds",
-            "ECG (uV)": "ecg_value_uv",
+            "ExGa 1(uV)": "ecg_value_uv",
         }
     )
 
@@ -66,7 +66,7 @@ def create_figure(df: pd.DataFrame) -> go.Figure:
             x=df["time_seconds"],
             y=df["ecg_value_uv"],
             mode="lines",
-            name="ECG",
+            name="ExGa 1",
             line=dict(color="#2E86AB", width=1.5),
         )
     )
@@ -83,7 +83,7 @@ def create_figure(df: pd.DataFrame) -> go.Figure:
             zerolinewidth=2,
         ),
         yaxis=dict(
-            title=dict(text="ECG値 (μV)", font=dict(size=16, color="#34495E")),
+            title=dict(text="ExGa 1 (μV)", font=dict(size=16, color="#34495E")),
             showgrid=True,
             gridcolor="#ECF0F1",
             zeroline=True,

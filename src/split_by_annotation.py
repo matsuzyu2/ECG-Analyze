@@ -12,7 +12,8 @@
 import pandas as pd
 import sys
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Any
+import re
 
 
 # 分割対象のアノテーションペア（Start/End）
@@ -63,7 +64,7 @@ def read_csv_with_metadata_skip(file_path: str) -> pd.DataFrame:
 
 def find_all_timestamps_for_annotations(
     df_annotation: pd.DataFrame, start_annotation: str, end_annotation: str
-) -> list[Tuple[str, str]]:
+) -> list[Tuple[Any, Any]]:
     """
     指定されたアノテーションペアのタイムスタンプを全て取得する
     
@@ -98,6 +99,39 @@ def find_all_timestamps_for_annotations(
     return result
 
 
+def _coerce_timestamp_column(df: pd.DataFrame, column: str = "Timestamp") -> Tuple[pd.DataFrame, str]:
+    """Timestamp列を比較・ソートしやすい型に揃える。
+
+    優先順位:
+      1) datetime (ISO形式など)
+      2) numeric
+      3) fallback: そのまま (string等)
+
+    Returns:
+        (df, kind) kind は 'datetime' | 'numeric' | 'raw'
+    """
+    if column not in df.columns:
+        return df, "raw"
+
+    series = df[column]
+
+    dt = pd.to_datetime(series, errors="coerce")
+    dt_valid_ratio = float(dt.notna().mean()) if len(series) else 0.0
+    if dt_valid_ratio >= 0.95:
+        df = df.copy()
+        df[column] = dt
+        return df, "datetime"
+
+    num = pd.to_numeric(series, errors="coerce")
+    num_valid_ratio = float(num.notna().mean()) if len(series) else 0.0
+    if num_valid_ratio >= 0.95:
+        df = df.copy()
+        df[column] = num
+        return df, "numeric"
+
+    return df, "raw"
+
+
 def split_csv_by_annotations(target_file: str, annotation_file: str) -> None:
     """
     アノテーションファイルに従ってCSVファイルを分割する
@@ -125,73 +159,125 @@ def split_csv_by_annotations(target_file: str, annotation_file: str) -> None:
         raise ValueError(f"分割対象ファイルに Timestamp 列が見つかりません: {target_file}")
     if 'Timestamp' not in df_annotation.columns or 'Annotation' not in df_annotation.columns:
         raise ValueError(f"アノテーションファイルに必要な列が見つかりません: {annotation_file}")
+
+    # Timestamp列を比較・ソートに向いた型へ揃える
+    df_target, target_ts_kind = _coerce_timestamp_column(df_target, "Timestamp")
+    df_annotation, ann_ts_kind = _coerce_timestamp_column(df_annotation, "Timestamp")
+    if target_ts_kind != ann_ts_kind and target_ts_kind != "raw" and ann_ts_kind != "raw":
+        print(
+            f"  ⚠ Timestamp型が一致しません (target={target_ts_kind}, annotation={ann_ts_kind})。\n"
+            f"    可能な範囲で処理しますが、抽出が空になる場合はTimestampの形式を確認してください。"
+        )
     
     # 出力ディレクトリの準備
     target_path = Path(target_file)
     output_dir = target_path.parent / "split_segments"
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 以前の実行結果が残っていると紛らわしいので、既存の分割CSVを削除
+    # 対象: "01_xxx.csv" のようなファイル名のみ
+    existing_segment_files = [
+        p for p in output_dir.glob("*.csv") if re.match(r"^\d{2}_.+\.csv$", p.name)
+    ]
+    if existing_segment_files:
+        for p in existing_segment_files:
+            try:
+                p.unlink()
+            except Exception:
+                # 消せないファイルがあっても処理は継続
+                pass
+        print(f"既存の分割ファイルを削除: {len(existing_segment_files)} 件")
     
     print(f"出力ディレクトリ: {output_dir}")
     print()
     
-    # 各アノテーションペアについて分割処理
-    split_count = 0
-    for idx, (start_annotation, end_annotation) in enumerate(ANNOTATION_PAIRS, 1):
-        print(f"[{idx}/{len(ANNOTATION_PAIRS)}] {start_annotation} → {end_annotation}")
-        
-        # アノテーションのタイムスタンプを全て取得
-        timestamp_pairs = find_all_timestamps_for_annotations(
-            df_annotation, start_annotation, end_annotation
-        )
-        
+    # --- 1) 全セグメントを収集 (複数出現も含む) ---
+    segments: list[dict[str, Any]] = []
+    missing_pairs = 0
+    for pair_idx, (start_annotation, end_annotation) in enumerate(ANNOTATION_PAIRS, 1):
+        print(f"[{pair_idx}/{len(ANNOTATION_PAIRS)}] {start_annotation} → {end_annotation}")
+
+        timestamp_pairs = find_all_timestamps_for_annotations(df_annotation, start_annotation, end_annotation)
         if not timestamp_pairs:
-            print(f"  ⚠ アノテーションが見つかりませんでした。スキップします。")
+            print("  ⚠ アノテーションが見つかりませんでした。スキップします。")
             print()
+            missing_pairs += 1
             continue
-        
-        # 複数の出現がある場合、それぞれを別ファイルとして保存
-        occurrence_count = len(timestamp_pairs)
+
+        # 出現順がTimestamp順になるように揃える（安全策）
+        timestamp_pairs_sorted = sorted(timestamp_pairs, key=lambda x: x[0])
+        occurrence_count = len(timestamp_pairs_sorted)
         print(f"  検出された出現回数: {occurrence_count}")
-        
-        for occurrence_idx, (start_ts, end_ts) in enumerate(timestamp_pairs, 1):
+
+        segment_name = start_annotation.replace("_Start", "")
+        for occurrence_idx, (start_ts, end_ts) in enumerate(timestamp_pairs_sorted, 1):
             if occurrence_count > 1:
                 print(f"  [{occurrence_idx}/{occurrence_count}]")
-            
+
             print(f"    開始タイムスタンプ: {start_ts}")
             print(f"    終了タイムスタンプ: {end_ts}")
-            
-            # 分割対象ファイルから該当する範囲を抽出
-            df_segment = df_target[
-                (df_target['Timestamp'] >= start_ts) & 
-                (df_target['Timestamp'] <= end_ts)
-            ]
-            
-            if df_segment.empty:
-                print(f"    ⚠ 該当するデータが見つかりませんでした。スキップします。")
-                print()
-                continue
-            
-            print(f"    抽出行数: {len(df_segment)}")
-            
-            # ファイル名を生成（セグメント番号_アノテーション名_出現回数.csv）
-            segment_name = start_annotation.replace("_Start", "")
-            
-            # 複数の出現がある場合は連番を追加
-            if occurrence_count > 1:
-                output_filename = f"{idx:02d}_{segment_name}_{occurrence_idx:02d}.csv"
-            else:
-                output_filename = f"{idx:02d}_{segment_name}.csv"
-            
-            output_path = output_dir / output_filename
-            
-            # CSVファイルとして保存
-            df_segment.to_csv(output_path, index=False)
-            print(f"    ✓ 保存: {output_path}")
-            
-            split_count += 1
-        
+
+            segments.append(
+                {
+                    "segment_name": segment_name,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "occurrence_idx": occurrence_idx,
+                    "occurrence_count": occurrence_count,
+                }
+            )
+
         print()
-    
+
+    if not segments:
+        print("完了: 分割対象のセグメントが見つかりませんでした。")
+        return
+
+    # --- 2) 開始時刻でソートし、通し番号(インデックス)を振る ---
+    segments_sorted = sorted(segments, key=lambda s: s["start_ts"])
+
+    # --- 3) 通し番号順に抽出して保存 ---
+    split_count = 0
+    total = len(segments_sorted)
+    print(f"保存処理: {total} セグメント（開始時刻順）")
+
+    for global_idx, seg in enumerate(segments_sorted, 1):
+        segment_name = seg["segment_name"]
+        start_ts = seg["start_ts"]
+        end_ts = seg["end_ts"]
+        occurrence_idx = int(seg["occurrence_idx"])
+        occurrence_count = int(seg["occurrence_count"])
+
+        print(f"[{global_idx}/{total}] {segment_name}")
+        print(f"    開始タイムスタンプ: {start_ts}")
+        print(f"    終了タイムスタンプ: {end_ts}")
+
+        df_segment = df_target[
+            (df_target["Timestamp"] >= start_ts)
+            & (df_target["Timestamp"] <= end_ts)
+        ]
+
+        if df_segment.empty:
+            print("    ⚠ 該当するデータが見つかりませんでした。スキップします。")
+            print()
+            continue
+
+        print(f"    抽出行数: {len(df_segment)}")
+
+        # ファイル名: 通し番号_セグメント名(_出現番号).csv
+        # 例: 04_Session_01.csv, 07_Session_02.csv
+        if occurrence_count > 1:
+            output_filename = f"{global_idx:02d}_{segment_name}_{occurrence_idx:02d}.csv"
+        else:
+            output_filename = f"{global_idx:02d}_{segment_name}.csv"
+
+        output_path = output_dir / output_filename
+        df_segment.to_csv(output_path, index=False)
+        print(f"    ✓ 保存: {output_path}")
+        print()
+
+        split_count += 1
+
     print(f"完了: {split_count} 個のセグメントを分割しました。")
 
 
