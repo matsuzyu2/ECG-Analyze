@@ -17,7 +17,7 @@ Usage:
     python src/run_hrv_metrics.py --session 251216_TK
     python src/run_hrv_metrics.py --session 251216_TK --segment 03_Resting_HR_1_Set1
 Output:
-    Results/{session}/hrv_summary.csv  - Complete HRV metrics for all segments
+    Results/hrv_summaries/{session}_hrv_summary.csv  - Complete HRV metrics for all segments
 """
 
 import argparse

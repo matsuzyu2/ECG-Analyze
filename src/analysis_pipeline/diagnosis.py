@@ -224,7 +224,9 @@ def create_diagnosis_report(
     Parameters
     ----------
     ecg_raw : np.ndarray
-        Raw ECG signal (after unit conversion, before filtering).
+        Raw ECG signal (after unit conversion). If automatic inversion was applied,
+        pass the original (pre-inversion) signal here so the report can show the
+        inverted polarity.
     ecg_filtered : np.ndarray
         Filtered ECG signal.
     time : np.ndarray
@@ -336,8 +338,10 @@ def create_diagnosis_report(
     
     # Add skewness annotation
     skew_text = f"Skewness: {polarity_result.skewness:.3f}"
-    if polarity_result.is_inverted:
+    if polarity_result.is_inverted and was_inverted:
         skew_text += " (INVERTED → Corrected)"
+    elif polarity_result.is_inverted and not was_inverted:
+        skew_text += " (INVERTED; not corrected)"
     
     # PSD plot
     fig.add_trace(
