@@ -123,11 +123,39 @@ def process_segment(
         # =====================================================================
         if verbose:
             print("  [3/5] Applying bandpass filter...")
+            if segment_data.has_padding:
+                print(f"        ℹ Segment has {config.FILTER_PADDING_SEC}s padding for edge artifact handling")
         
         ecg_filtered = filter_ecg(ecg_oriented, config=config)
         
         if verbose:
             print(f"        ✓ Butterworth {config.BANDPASS_LOW}-{config.BANDPASS_HIGH}Hz (order={config.FILTER_ORDER})")
+        
+        # =====================================================================
+        # Step 3.5: Trim padding after filtering (if present)
+        # =====================================================================
+        if segment_data.has_padding:
+            if verbose:
+                print(f"        ℹ Trimming padding: keeping indices [{segment_data.original_start_idx}:{segment_data.original_end_idx+1}]")
+            
+            # Validate bounds before slicing
+            start_idx = segment_data.original_start_idx
+            end_idx = segment_data.original_end_idx + 1
+            
+            if start_idx < 0 or end_idx > len(ecg_filtered) or start_idx >= end_idx:
+                print(f"        ⚠ Warning: Invalid padding bounds [{start_idx}:{end_idx}] for array length {len(ecg_filtered)}")
+                print(f"        ⚠ Skipping padding trim, using full signal")
+            else:
+                # Trim the filtered signal to remove padding
+                ecg_filtered = ecg_filtered[start_idx:end_idx]
+                
+                # Also trim the raw signal and time array for consistency
+                ecg_raw = ecg_raw[start_idx:end_idx]
+                ecg_oriented = ecg_oriented[start_idx:end_idx]
+                time = time[start_idx:end_idx]
+                
+                if verbose:
+                    print(f"        ✓ Trimmed to {len(ecg_filtered):,} samples ({len(ecg_filtered)/segment_data.fs:.1f}s)")
         
         # =====================================================================
         # Step 4: Power spectral density analysis

@@ -29,6 +29,10 @@ class SegmentData:
     session_id: str           # Session identifier
     was_converted: bool       # True if µV→mV conversion was applied
     original_mean_abs: float  # Mean absolute value before conversion
+    # Padding information for edge artifact handling
+    has_padding: bool = False  # True if segment has filter padding
+    original_start_idx: int = 0  # Start index of original (unpadded) segment
+    original_end_idx: int = -1   # End index of original (unpadded) segment
     
     @property
     def duration_seconds(self) -> float:
@@ -181,6 +185,62 @@ def load_segment_csv(
     else:
         timestamps = None
     
+    # Check for padding metadata (added by split_by_annotation.py)
+    has_padding = False
+    original_start_idx = 0
+    original_end_idx = len(ecg) - 1
+    
+    if '_original_start_ts' in df.columns and '_original_end_ts' in df.columns:
+        # Segment has padding metadata
+        has_padding = True
+        original_start_ts = df['_original_start_ts'].iloc[0]
+        original_end_ts = df['_original_end_ts'].iloc[0]
+        
+        # Find indices corresponding to original (unpadded) boundaries
+        # Use Timestamp column if available, otherwise use Time column
+        if 'Timestamp' in df.columns:
+            try:
+                # Try to convert timestamps to numeric for comparison
+                timestamp_col = pd.to_numeric(df['Timestamp'], errors='coerce').to_numpy(dtype=np.float64, copy=True)
+                original_start_ts_num = float(original_start_ts)
+                original_end_ts_num = float(original_end_ts)
+                
+                # Find the closest indices to original boundaries
+                original_start_idx = int(np.argmin(np.abs(timestamp_col - original_start_ts_num)))
+                original_end_idx = int(np.argmin(np.abs(timestamp_col - original_end_ts_num)))
+            except (ValueError, TypeError):
+                # If timestamp conversion fails, fall back to padding estimation
+                print(f"  ⚠ Warning: Could not convert timestamps to numeric. Using padding estimation for original segment bounds; results may be approximate.")
+                padding_samples = int(config.FILTER_PADDING_SEC * config.SAMPLING_RATE)
+                original_start_idx = padding_samples
+                original_end_idx = len(ecg) - 1 - padding_samples
+                # Basic validation to ensure estimated indices form a valid range
+                total_samples = len(ecg)
+                if (
+                    original_start_idx < 0
+                    or original_end_idx >= total_samples
+                    or original_start_idx >= original_end_idx
+                ):
+                    print("  ⚠ Warning: Estimated original indices from padding are invalid; using full segment as original.")
+                    original_start_idx = 0
+                    original_end_idx = total_samples - 1
+        else:
+            # Fallback: estimate based on padding duration
+            print(f"  ⚠ Warning: No 'Timestamp' column found. Estimating original segment bounds from padding; results may be approximate.")
+            padding_samples = int(config.FILTER_PADDING_SEC * config.SAMPLING_RATE)
+            original_start_idx = padding_samples
+            original_end_idx = len(ecg) - 1 - padding_samples
+            # Basic validation to ensure estimated indices form a valid range
+            total_samples = len(ecg)
+            if (
+                original_start_idx < 0
+                or original_end_idx >= total_samples
+                or original_start_idx >= original_end_idx
+            ):
+                print("  ⚠ Warning: Estimated original indices from padding are invalid; using full segment as original.")
+                original_start_idx = 0
+                original_end_idx = total_samples - 1
+    
     # Extract segment name from filename
     segment_name = csv_path.stem
     
@@ -193,6 +253,9 @@ def load_segment_csv(
         session_id=session_id,
         was_converted=was_converted,
         original_mean_abs=original_mean_abs,
+        has_padding=has_padding,
+        original_start_idx=original_start_idx,
+        original_end_idx=original_end_idx,
     )
 
 

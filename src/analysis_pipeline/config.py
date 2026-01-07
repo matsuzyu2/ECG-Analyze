@@ -32,6 +32,11 @@ class Config:
     BANDPASS_HIGH: float = 40.0  # Hz - removes high-frequency noise/EMG
     FILTER_ORDER: int = 4        # Butterworth filter order
     
+    # Edge artifact handling: padding duration in seconds
+    # This padding is added before filtering and removed before R-peak detection
+    # to prevent edge artifacts during bandpass filtering
+    FILTER_PADDING_SEC: float = 15.0  # seconds
+    
     @property
     def BANDPASS(self) -> Tuple[float, float]:
         """Return bandpass frequency range as tuple."""

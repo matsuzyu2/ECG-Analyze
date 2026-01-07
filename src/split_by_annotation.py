@@ -15,6 +15,18 @@ from pathlib import Path
 from typing import Tuple, Any
 import re
 
+# Import configuration for consistency
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from analysis_pipeline.config import Config
+
+# Get default config instance
+_config = Config()
+
+# Edge artifact handling: add padding to prevent filter artifacts at segment boundaries
+# This padding will be removed after filtering in the processing pipeline
+FILTER_PADDING_SEC = _config.FILTER_PADDING_SEC  # seconds
+SAMPLING_RATE = _config.SAMPLING_RATE  # Hz
+
 
 # 分割対象のアノテーションペア（Start/End）
 ANNOTATION_PAIRS = [
@@ -132,6 +144,49 @@ def _coerce_timestamp_column(df: pd.DataFrame, column: str = "Timestamp") -> Tup
     return df, "raw"
 
 
+def calculate_timestamp_offset(df: pd.DataFrame, timestamp_col: str, offset_sec: float) -> Any:
+    """
+    Calculate a timestamp offset based on the average sampling interval.
+    
+    Args:
+        df: DataFrame containing timestamp data
+        timestamp_col: Name of the timestamp column
+        offset_sec: Offset in seconds
+        
+    Returns:
+        Timestamp offset value (numeric or datetime)
+    """
+    ts_series = df[timestamp_col]
+    
+    # Check if timestamps are numeric
+    if pd.api.types.is_numeric_dtype(ts_series):
+        # For numeric timestamps, just add the offset
+        return offset_sec
+    
+    # For datetime timestamps, use timedelta
+    try:
+        # Calculate average sampling interval from first 100 samples
+        sample_size = min(100, len(ts_series))
+        if sample_size >= 2:
+            intervals = ts_series.iloc[:sample_size].diff().dropna()
+            avg_interval = intervals.mean()
+            
+            # Calculate number of samples corresponding to the offset duration
+            avg_interval_sec = avg_interval.total_seconds()
+            if avg_interval_sec > 0:
+                n_samples = int(offset_sec / avg_interval_sec)
+                return avg_interval * n_samples
+            else:
+                # Fallback: use timedelta if the average interval is invalid
+                return pd.Timedelta(seconds=offset_sec)
+        else:
+            # Fallback: use timedelta
+            return pd.Timedelta(seconds=offset_sec)
+    except Exception:
+        # If datetime operations fail, use timedelta
+        return pd.Timedelta(seconds=offset_sec)
+
+
 def split_csv_by_annotations(target_file: str, annotation_file: str) -> None:
     """
     アノテーションファイルに従ってCSVファイルを分割する
@@ -240,6 +295,11 @@ def split_csv_by_annotations(target_file: str, annotation_file: str) -> None:
     split_count = 0
     total = len(segments_sorted)
     print(f"保存処理: {total} セグメント（開始時刻順）")
+    print(f"フィルタパディング: {FILTER_PADDING_SEC}秒")
+    print()
+    
+    # Calculate timestamp offset for padding
+    padding_offset = calculate_timestamp_offset(df_target, "Timestamp", FILTER_PADDING_SEC)
 
     for global_idx, seg in enumerate(segments_sorted, 1):
         segment_name = seg["segment_name"]
@@ -251,10 +311,18 @@ def split_csv_by_annotations(target_file: str, annotation_file: str) -> None:
         print(f"[{global_idx}/{total}] {segment_name}")
         print(f"    開始タイムスタンプ: {start_ts}")
         print(f"    終了タイムスタンプ: {end_ts}")
+        
+        # Add padding to start and end timestamps
+        start_ts_padded = start_ts - padding_offset
+        end_ts_padded = end_ts + padding_offset
+        
+        print(f"    パディング後開始: {start_ts_padded}")
+        print(f"    パディング後終了: {end_ts_padded}")
 
+        # Extract segment with padding
         df_segment = df_target[
-            (df_target["Timestamp"] >= start_ts)
-            & (df_target["Timestamp"] <= end_ts)
+            (df_target["Timestamp"] >= start_ts_padded)
+            & (df_target["Timestamp"] <= end_ts_padded)
         ]
 
         if df_segment.empty:
@@ -262,7 +330,13 @@ def split_csv_by_annotations(target_file: str, annotation_file: str) -> None:
             print()
             continue
 
-        print(f"    抽出行数: {len(df_segment)}")
+        print(f"    抽出行数（パディング含む): {len(df_segment)}")
+        
+        # Add metadata columns to track original (unpadded) segment boundaries
+        # These will be used in the processing pipeline to trim the padding after filtering
+        df_segment = df_segment.copy()
+        df_segment['_original_start_ts'] = start_ts
+        df_segment['_original_end_ts'] = end_ts
 
         # ファイル名: 通し番号_セグメント名(_出現番号).csv
         # 例: 04_Session_01.csv, 07_Session_02.csv
