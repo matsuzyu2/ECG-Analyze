@@ -121,6 +121,45 @@ python src/run_group_stats.py
 
 - `Results/stats/`
 
+### 追加: 心拍フィードバック（Session）前半/後半の効果確認（デフォルト各3分）
+
+`split_segments/` 内のファイル名に `Session` を含むセグメント（複数可）を対象に、
+前半 `3分` と後半 `3分` のHR/HRV指標を算出して差分（後半−前半）を出力します。
+
+```bash
+# 全セッションを対象（デフォルト: 180秒=3分）
+python src/run_hr_feedback_effect.py
+
+# 特定セッションのみ
+python src/run_hr_feedback_effect.py --session 251216_TK
+
+# ウィンドウ長変更（例: 120秒=2分）
+python src/run_hr_feedback_effect.py --window-sec 120
+```
+
+出力:
+
+- `Results/stats/hr_feedback_effect_180s.csv`（window秒数に応じてファイル名が変わります）
+
+CSVの見方（効果を見る基本）:
+
+- 1行 = 1つの `Session*` セグメント（例: `04_Session`）
+- `early_*` が前半、`late_*` が後半
+- `diff_*` は「後半 − 前半」
+- `pct_*` は「(後半−前半)/前半 × 100」
+
+まず見る列（おすすめ）:
+
+- `diff_time_mean_hr`（bpm）: 平均心拍の変化
+- `diff_time_rmssd`（ms）: 副交感指標の変化（増えると“ゆらぎ”増）
+- `diff_freq_lf_hf_ratio`: 自律神経バランスの変化（解釈は研究方針に合わせて）
+
+品質チェック（最低限）:
+
+- `early_removal_rate` / `late_removal_rate`: RR除外率が高い行は信頼性に注意
+- `early_rpeak_quality_score` / `late_rpeak_quality_score`: Rピーク検出品質の目安
+- `notes` / `early_quality_notes` / `late_quality_notes`: 窓が短い・重なった等の警告
+
 ## 出力
 
 出力は次の場所に保存されます。
