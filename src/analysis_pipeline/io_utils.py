@@ -183,15 +183,36 @@ def load_segment_csv(
                 original_end_idx = int(np.argmin(np.abs(timestamp_col - original_end_ts_num)))
             except (ValueError, TypeError):
                 # If timestamp conversion fails, fall back to padding estimation
-                print(f"  ⚠ Warning: Could not convert timestamps to numeric. Using padding estimation.")
+                print(f"  ⚠ Warning: Could not convert timestamps to numeric. Using padding estimation for original segment bounds; results may be approximate.")
                 padding_samples = int(config.FILTER_PADDING_SEC * config.SAMPLING_RATE)
                 original_start_idx = padding_samples
                 original_end_idx = len(ecg) - 1 - padding_samples
+                # Basic validation to ensure estimated indices form a valid range
+                total_samples = len(ecg)
+                if (
+                    original_start_idx < 0
+                    or original_end_idx >= total_samples
+                    or original_start_idx >= original_end_idx
+                ):
+                    print("  ⚠ Warning: Estimated original indices from padding are invalid; using full segment as original.")
+                    original_start_idx = 0
+                    original_end_idx = total_samples - 1
         else:
             # Fallback: estimate based on padding duration
+            print(f"  ⚠ Warning: No 'Timestamp' column found. Estimating original segment bounds from padding; results may be approximate.")
             padding_samples = int(config.FILTER_PADDING_SEC * config.SAMPLING_RATE)
             original_start_idx = padding_samples
             original_end_idx = len(ecg) - 1 - padding_samples
+            # Basic validation to ensure estimated indices form a valid range
+            total_samples = len(ecg)
+            if (
+                original_start_idx < 0
+                or original_end_idx >= total_samples
+                or original_start_idx >= original_end_idx
+            ):
+                print("  ⚠ Warning: Estimated original indices from padding are invalid; using full segment as original.")
+                original_start_idx = 0
+                original_end_idx = total_samples - 1
     
     # Extract segment name from filename
     segment_name = csv_path.stem
