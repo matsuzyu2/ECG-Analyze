@@ -39,9 +39,10 @@ venv.bak/
 *~
 .DS_Store
 
-# Data files (except examples)
+# Data files (except examples, conditions may apply)
 Data/*
 !Data/Example/
+!Data/Condition/
 Results/
 
 # Reference files
