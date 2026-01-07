@@ -171,9 +171,14 @@ def calculate_timestamp_offset(df: pd.DataFrame, timestamp_col: str, offset_sec:
             intervals = ts_series.iloc[:sample_size].diff().dropna()
             avg_interval = intervals.mean()
             
-            # Calculate number of samples for the offset
-            n_samples = int(offset_sec * SAMPLING_RATE)
-            return avg_interval * n_samples
+            # Calculate number of samples corresponding to the offset duration
+            avg_interval_sec = avg_interval.total_seconds()
+            if avg_interval_sec > 0:
+                n_samples = int(offset_sec / avg_interval_sec)
+                return avg_interval * n_samples
+            else:
+                # Fallback: use timedelta if the average interval is invalid
+                return pd.Timedelta(seconds=offset_sec)
         else:
             # Fallback: use timedelta
             return pd.Timedelta(seconds=offset_sec)
