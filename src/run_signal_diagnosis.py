@@ -154,10 +154,6 @@ def process_segment(
                 ecg_oriented = ecg_oriented[start_idx:end_idx]
                 time = time[start_idx:end_idx]
                 
-                # Update segment_data to reflect trimmed size
-                segment_data.ecg = ecg_raw
-                segment_data.time = time
-                
                 if verbose:
                     print(f"        ✓ Trimmed to {len(ecg_filtered):,} samples ({len(ecg_filtered)/segment_data.fs:.1f}s)")
         
