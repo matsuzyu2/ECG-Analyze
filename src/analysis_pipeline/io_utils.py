@@ -9,8 +9,8 @@ Handles:
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List
-from dataclasses import dataclass, asdict
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass, asdict, fields
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ class SegmentData:
     """Container for loaded segment data."""
     ecg: np.ndarray           # ECG signal in mV
     time: np.ndarray          # Time in seconds
+    timestamps: Optional[np.ndarray]  # Absolute timestamps per sample (string), if available
     fs: int                   # Sampling rate
     segment_name: str         # Segment identifier
     session_id: str           # Session identifier
@@ -55,6 +56,11 @@ class PeakInfo:
     detection_method: str            # Detection algorithm used
     processed_at: str                # ISO timestamp
     quality_notes: List[str]         # Quality warnings/notes
+
+    # Optional absolute timing information for external synchronization
+    peak_timestamps: Optional[List[Optional[str]]] = None  # Absolute timestamps for R-peaks
+    segment_start_timestamp: Optional[str] = None          # Absolute timestamp for segment start
+    segment_end_timestamp: Optional[str] = None            # Absolute timestamp for segment end
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -62,8 +68,15 @@ class PeakInfo:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PeakInfo":
-        """Create PeakInfo from dictionary."""
-        return cls(**data)
+        """Create PeakInfo from dictionary.
+
+        Backward/forward compatible:
+        - Missing keys fall back to dataclass defaults.
+        - Unknown keys are ignored.
+        """
+        allowed = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in allowed}
+        return cls(**filtered)
 
 
 def load_segment_csv(
@@ -141,7 +154,7 @@ def load_segment_csv(
         ecg = ecg_raw
         was_converted = False
     
-    # Extract time column
+    # Extract time column (relative seconds)
     time_column = None
     for col in df.columns:
         if "time" in col.lower() and "stamp" not in col.lower():
@@ -153,6 +166,20 @@ def load_segment_csv(
     else:
         # Generate time array from sampling rate
         time = np.arange(len(ecg), dtype=np.float64) / config.SAMPLING_RATE
+
+    # Extract absolute timestamp column if present (for external synchronization)
+    timestamp_column = None
+    for col in df.columns:
+        if col.lower() == "timestamp" or "timestamp" in col.lower():
+            timestamp_column = col
+            break
+
+    if timestamp_column is not None:
+        # Keep as strings so we can write directly to JSON (e.g., "2025-12-15 12:13:54.000")
+        ts_series = df[timestamp_column]
+        timestamps = ts_series.astype("string").to_numpy(dtype=object, copy=True)
+    else:
+        timestamps = None
     
     # Extract segment name from filename
     segment_name = csv_path.stem
@@ -160,6 +187,7 @@ def load_segment_csv(
     return SegmentData(
         ecg=ecg,
         time=time,
+        timestamps=timestamps,
         fs=config.SAMPLING_RATE,
         segment_name=segment_name,
         session_id=session_id,

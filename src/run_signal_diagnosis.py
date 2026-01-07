@@ -195,12 +195,45 @@ def process_segment(
         # =====================================================================
         quality_notes = detection_result.quality_notes.copy()
         quality_notes.extend(psd_result.noise_notes)
+
+        peak_timestamps = None
+        segment_start_timestamp = None
+        segment_end_timestamp = None
+
+        if segment_data.timestamps is not None:
+            ts = segment_data.timestamps
+
+            def _to_optional_str(value):
+                if value is None:
+                    return None
+                text = str(value)
+                return None if text.strip().lower() in {"<na>", "nan", "nat", "none"} else text
+
+            # Segment bounds
+            if len(ts) > 0:
+                segment_start_timestamp = _to_optional_str(ts[0])
+                segment_end_timestamp = _to_optional_str(ts[-1])
+
+            # Peak timestamps
+            peak_timestamps = []
+            for raw_idx in detection_result.peak_indices:
+                idx = int(raw_idx)
+                if 0 <= idx < len(ts):
+                    peak_timestamps.append(_to_optional_str(ts[idx]))
+                else:
+                    peak_timestamps.append(None)
+                    quality_notes.append("⚠ Peak index out of range for Timestamp mapping")
+        else:
+            quality_notes.append("⚠ Timestamp column not found; peak_timestamps not saved")
         
         peak_info = PeakInfo(
             segment_name=segment_name,
             session_id=session_id,
             peak_indices=detection_result.peak_indices.tolist(),
             peak_times=detection_result.peak_times.tolist(),
+            peak_timestamps=peak_timestamps,
+            segment_start_timestamp=segment_start_timestamp,
+            segment_end_timestamp=segment_end_timestamp,
             is_inverted=was_inverted,
             skewness=float(polarity_result.skewness),
             was_converted=segment_data.was_converted,
