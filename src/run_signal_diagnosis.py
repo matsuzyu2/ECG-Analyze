@@ -142,7 +142,7 @@ def process_segment(
             start_idx = segment_data.original_start_idx
             end_idx = segment_data.original_end_idx + 1
             
-            if start_idx < 0 or end_idx > len(ecg_filtered):
+            if start_idx < 0 or end_idx > len(ecg_filtered) or start_idx >= end_idx:
                 print(f"        ⚠ Warning: Invalid padding bounds [{start_idx}:{end_idx}] for array length {len(ecg_filtered)}")
                 print(f"        ⚠ Skipping padding trim, using full signal")
             else:
