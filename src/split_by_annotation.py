@@ -15,6 +15,18 @@ from pathlib import Path
 from typing import Tuple, Any
 import re
 
+# Import configuration for consistency
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from analysis_pipeline.config import Config
+
+# Get default config instance
+_config = Config()
+
+# Edge artifact handling: add padding to prevent filter artifacts at segment boundaries
+# This padding will be removed after filtering in the processing pipeline
+FILTER_PADDING_SEC = _config.FILTER_PADDING_SEC  # seconds
+SAMPLING_RATE = _config.SAMPLING_RATE  # Hz
+
 
 # 分割対象のアノテーションペア（Start/End）
 ANNOTATION_PAIRS = [
@@ -28,11 +40,6 @@ ANNOTATION_PAIRS = [
     ("Resting_HR_2_Set2_Start", "Resting_HR_2_Set2_End"),
     ("GoNoGo_Set2_Start", "GoNoGo_Set2_End"),
 ]
-
-# Edge artifact handling: add padding to prevent filter artifacts at segment boundaries
-# This padding will be removed after filtering in the processing pipeline
-FILTER_PADDING_SEC = 15.0  # seconds
-SAMPLING_RATE = 500  # Hz (must match config.py)
 
 
 def read_csv_with_metadata_skip(file_path: str) -> pd.DataFrame:

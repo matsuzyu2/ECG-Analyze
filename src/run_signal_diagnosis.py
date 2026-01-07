@@ -138,20 +138,28 @@ def process_segment(
             if verbose:
                 print(f"        ℹ Trimming padding: keeping indices [{segment_data.original_start_idx}:{segment_data.original_end_idx+1}]")
             
-            # Trim the filtered signal to remove padding
-            ecg_filtered = ecg_filtered[segment_data.original_start_idx:segment_data.original_end_idx+1]
+            # Validate bounds before slicing
+            start_idx = segment_data.original_start_idx
+            end_idx = segment_data.original_end_idx + 1
             
-            # Also trim the raw signal and time array for consistency
-            ecg_raw = ecg_raw[segment_data.original_start_idx:segment_data.original_end_idx+1]
-            ecg_oriented = ecg_oriented[segment_data.original_start_idx:segment_data.original_end_idx+1]
-            time = time[segment_data.original_start_idx:segment_data.original_end_idx+1]
-            
-            # Update segment_data to reflect trimmed size
-            segment_data.ecg = ecg_raw
-            segment_data.time = time
-            
-            if verbose:
-                print(f"        ✓ Trimmed to {len(ecg_filtered):,} samples ({len(ecg_filtered)/segment_data.fs:.1f}s)")
+            if start_idx < 0 or end_idx > len(ecg_filtered):
+                print(f"        ⚠ Warning: Invalid padding bounds [{start_idx}:{end_idx}] for array length {len(ecg_filtered)}")
+                print(f"        ⚠ Skipping padding trim, using full signal")
+            else:
+                # Trim the filtered signal to remove padding
+                ecg_filtered = ecg_filtered[start_idx:end_idx]
+                
+                # Also trim the raw signal and time array for consistency
+                ecg_raw = ecg_raw[start_idx:end_idx]
+                ecg_oriented = ecg_oriented[start_idx:end_idx]
+                time = time[start_idx:end_idx]
+                
+                # Update segment_data to reflect trimmed size
+                segment_data.ecg = ecg_raw
+                segment_data.time = time
+                
+                if verbose:
+                    print(f"        ✓ Trimmed to {len(ecg_filtered):,} samples ({len(ecg_filtered)/segment_data.fs:.1f}s)")
         
         # =====================================================================
         # Step 4: Power spectral density analysis

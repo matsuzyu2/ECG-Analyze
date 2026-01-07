@@ -172,10 +172,21 @@ def load_segment_csv(
         # Find indices corresponding to original (unpadded) boundaries
         # Use Timestamp column if available, otherwise use Time column
         if 'Timestamp' in df.columns:
-            timestamp_col = df['Timestamp'].to_numpy(dtype=np.float64, copy=True)
-            # Find the closest indices to original boundaries
-            original_start_idx = int(np.argmin(np.abs(timestamp_col - original_start_ts)))
-            original_end_idx = int(np.argmin(np.abs(timestamp_col - original_end_ts)))
+            try:
+                # Try to convert timestamps to numeric for comparison
+                timestamp_col = pd.to_numeric(df['Timestamp'], errors='coerce').to_numpy(dtype=np.float64, copy=True)
+                original_start_ts_num = float(original_start_ts)
+                original_end_ts_num = float(original_end_ts)
+                
+                # Find the closest indices to original boundaries
+                original_start_idx = int(np.argmin(np.abs(timestamp_col - original_start_ts_num)))
+                original_end_idx = int(np.argmin(np.abs(timestamp_col - original_end_ts_num)))
+            except (ValueError, TypeError):
+                # If timestamp conversion fails, fall back to padding estimation
+                print(f"  ⚠ Warning: Could not convert timestamps to numeric. Using padding estimation.")
+                padding_samples = int(config.FILTER_PADDING_SEC * config.SAMPLING_RATE)
+                original_start_idx = padding_samples
+                original_end_idx = len(ecg) - 1 - padding_samples
         else:
             # Fallback: estimate based on padding duration
             padding_samples = int(config.FILTER_PADDING_SEC * config.SAMPLING_RATE)
